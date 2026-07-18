@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "cute-dreamcore-nutrition-illustration"
 version = "0.2.0"
 description = "Six-stage cute Chinese dreamcore nutrition illustration chain with explicit GPT planning and language-aware export."
+authors = [{ name = "Wang Runyuan", email = "jykmsg@163.com" }]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.5", "typer>=0.12", "Pillow>=10.0", "httpx>=0.26", "rich>=13.0"]
