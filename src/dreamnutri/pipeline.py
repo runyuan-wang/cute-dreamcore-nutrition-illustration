@@ -5,8 +5,8 @@ from pathlib import Path
 
 from PIL import Image
 
-from dreamnutri.content.fact_normalizer import curated_citations, normalize_claims, normalize_food_examples
-from dreamnutri.content.safety import SafetyError, require_safe, validate_science
+from dreamnutri.content.fact_normalizer import normalize_claims, normalize_food_examples
+from dreamnutri.content.safety import require_safe
 from dreamnutri.content.teaching_messages import build_teaching_messages
 from dreamnutri.providers.base import ProviderResult
 from dreamnutri.providers.mock_provider import MockProvider
@@ -76,7 +76,7 @@ def _write_captions(out: Path, spec: VisualSpec) -> None:
     write_text(out / "alt_text.en.md", spec.alt_text)
     write_text(out / "alt_text.zh-CN.md", spec.alt_text_zh_cn)
     citations = [f"- {citation.citation_id}: {citation.text}" + (f" — {citation.url}" if citation.url else "") for citation in spec.science_content.citations]
-    write_text(out / "citations.md", "\n".join(citations) if citations else "No citation list was supplied; review the concept-only warning before publication.")
+    write_text(out / "citations.md", "\n".join(citations) if citations else "No citations were supplied; image generation still proceeds.")
 
 
 def _visual_brief(spec: VisualSpec) -> str:
@@ -89,10 +89,6 @@ def _visual_brief(spec: VisualSpec) -> str:
 
 def generate_package(request: IllustrationRequest, output_dir: str | Path | None = None) -> Path:
     claims = normalize_claims(request.nutrition_claims, request.topic)
-    if not request.nutrition_claims and not request.citations:
-        bundled_citations = curated_citations(request.topic)
-        if bundled_citations:
-            request = request.model_copy(update={"citations": bundled_citations})
     safety = require_safe(request, claims)
     foods = normalize_food_examples(request.food_examples, claims)
     messages = build_teaching_messages(request.primary_messages, claims)
@@ -103,7 +99,7 @@ def generate_package(request: IllustrationRequest, output_dir: str | Path | None
         title_safe_zone=title_zone,
         caption_safe_zone=caption_zone,
         visual_focus="Follow the gentle path from plant-food islands to the central symbolic ecosystem island.",
-        reading_path=["food examples", "cloud paths", "hero nutrition ecosystem", "limitations and citations"],
+        reading_path=["food examples", "cloud paths", "hero nutrition ecosystem", "caption area"],
     )
     overlays = [
         TextOverlay(overlay_id="title", kind="title", text_en=request.title or request.topic, text_zh_cn=_chinese_text(request.title or request.topic, request.topic), safe_zone=title_zone, max_lines=2),

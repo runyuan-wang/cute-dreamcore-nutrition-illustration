@@ -1,21 +1,21 @@
 # Cute Chinese Dreamcore Nutrition Illustration
 
-> Turn evidence-based nutrition knowledge into adorable Chinese dreamcore floating worlds.
+> Turn supplied nutrition and health-education content into adorable Chinese dreamcore floating worlds.
 
-**Science first. Teaching second. Dreamlike visual storytelling third.**
+**Give it the content. It builds the cute visual world.**
 
-This standalone, open-source Python project turns verified nutrition claims into an inspectable visual package: normalized facts, teaching messages, a floating-island world plan, modular image prompts, negative prompts, bilingual captions, accessible alt text, quality checks, and an optional rendered poster.
+This standalone, open-source Python project turns caller-supplied nutrition or health-education content into an inspectable visual package: normalized facts, teaching messages, a floating-island world plan, modular image prompts, negative prompts, bilingual captions, accessible alt text, quality checks, and an optional rendered poster.
 
-It is designed by a Chinese Registered Dietitian to combine evidence-based nutrition communication with an original cute Chinese dreamcore visual system. It supports science communication; it does not provide diagnosis, treatment, prescriptions, or individualized medical advice.
+It is designed by a Chinese Registered Dietitian as an original cute Chinese dreamcore visual system for science communication. It renders supplied content; it does not judge clinical correctness or provide individualized medical advice.
 
 ## Why this project
 
 The project deliberately separates four layers:
 
-1. **Scientific truth** — supported claims, population scope, limitations, and citations.
+1. **Input content** — caller-supplied topic, messages, optional claims, and optional citations.
 2. **Teaching messages** — short, audience-appropriate educational statements.
 3. **Visual world** — floating islands, food residents, microbe sprites, clouds, bridges, and gentle Chinese-inspired motifs.
-4. **Text overlay** — readable titles, callouts, captions, and citations added programmatically after image generation.
+4. **Text overlay** — readable titles, callouts, captions, and optional citations added programmatically after image generation.
 
 Image models are not asked to reason about evidence or render long accurate text. The canonical source of every downstream artifact is `visual_spec.json`.
 
@@ -88,11 +88,11 @@ The lesson integration consumes only the external JSON contract and does not imp
 
 Each run contains `request.json`, `normalized_facts.json`, `teaching_messages.json`, `visual_spec.json`, `visual_brief.md`, `image_prompt.md`, `negative_prompt.md`, bilingual captions and alt text, `citations.md`, JSON/Markdown quality reports, a generation manifest, `layout_mock_preview.png`, `text_overlay_mock_preview.png`, and `comparison_contact_sheet.png`. Real-provider runs additionally contain `illustration_raw.png` and `illustration_final.png`.
 
-## Science-safety design
+## Content boundary
 
-Every health-related visual begins with a supplied or curated `NutritionClaim`. The package distinguishes evidence-supported fact, educational interpretation, and visual metaphor. Causal overstatement, treatment promises, unsupported numbers, random citations, and population-scope loss are rejected or downgraded to a clearly marked concept-only package.
+This repository is an illustration renderer, not a medical-content review engine. Citation lists are optional, and the renderer does not reject an image because the input contains words such as prevention, treatment, or diagnosis. The upstream author remains responsible for factual, editorial, and clinical review.
 
-Food is not moralized, body size is not stigmatized, and symbolic scenery is never presented as literal anatomy. Limitations remain in the package even when they are not printed on the poster.
+The visual layer still avoids body-shaming, fear-based design, literal-anatomy confusion, and copyrighted or unsafe imagery.
 
 ## Text-overlay architecture
 
@@ -106,7 +106,7 @@ The MVP has a small curated fact set and no literature retrieval. The determinis
 
 ## Roadmap
 
-- More curated nutrition evidence adapters.
+- More input adapters and reusable visual templates.
 - Human-in-the-loop visual review cards.
 - Provider adapters with explicit model capability metadata.
 - More layout templates and accessible export formats.

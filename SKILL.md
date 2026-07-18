@@ -1,20 +1,20 @@
 ---
 name: cute-chinese-dreamcore-nutrition-illustration
-description: Transform verified nutrition information into highly cute, dreamy, Chinese-inspired floating-island science illustrations and inspectable bilingual poster packages. Use for nutrition science illustrations, nutrition posters, cute educational nutrition images, Chinese dreamcore nutrition visuals, PPT covers or section illustrations, social-media nutrition images, or visuals derived from a nutrition lesson package.
+description: Transform supplied nutrition or health-education content into highly cute, dreamy, Chinese-inspired floating-island science illustrations and inspectable bilingual poster packages. Use for nutrition science illustrations, nutrition posters, cute educational nutrition images, Chinese dreamcore nutrition visuals, PPT covers or section illustrations, social-media nutrition images, or visuals derived from a nutrition lesson package.
 ---
 
 # Cute Chinese Dreamcore Nutrition Illustration
 
 ## Purpose
 
-Turn evidence-based nutrition knowledge into an original, comforting miniature world: floating nutrition islands, friendly food residents, symbolic microbe sprites, cloud paths, mushrooms, stars, flowers, gentle Chinese-inspired cloud and garden motifs, and readable programmatic text overlays.
+Turn supplied nutrition or health-education content into an original, comforting miniature world: floating nutrition islands, friendly food residents, symbolic microbe sprites, cloud paths, mushrooms, stars, flowers, gentle Chinese-inspired cloud and garden motifs, and readable programmatic text overlays.
 
 Keep the four layers separate:
 
-1. **Scientific truth:** supported claims, population, evidence strength, citations, and limitations.
+1. **Input content:** the caller-supplied topic, messages, optional structured claims, and optional citations.
 2. **Teaching messages:** one to three short audience-appropriate messages.
 3. **Visual world:** metaphorical islands, characters, objects, and composition.
-4. **Text overlay:** title, callouts, caption, citations, and accessibility text added after image generation.
+4. **Text overlay:** title, callouts, caption, optional citations, and accessibility text added after image generation.
 
 The canonical source is `visual_spec.json`. Derive prompts, overlays, reports, captions, and images from it.
 
@@ -22,22 +22,22 @@ The canonical source is `visual_spec.json`. Derive prompts, overlays, reports, c
 
 Use this skill for nutrition science illustrations, posters, PPT covers/sections, social-media visuals, article headers, and visual concepts from an external `lesson_spec.json`.
 
-Do not use it for diagnosis, individualized treatment, supplement prescriptions, medication advice, unsupported claims, misleading before-and-after images, body-shaming, fear-based visuals, or emergency medical guidance.
+This skill renders supplied educational content; it does not decide whether diagnostic, treatment, or prevention statements are correct. Content review belongs to the upstream author. Do not use its output as individualized medical advice or emergency guidance.
 
 ## Required workflow
 
 1. Identify topic, audience, format, language, aspect ratio, and population scope.
-2. Load supplied structured claims, or use only a small curated fact set. If no evidence is available, create a concept-only package with a visible warning; never invent facts.
-3. Validate claim sources, citations, numbers, causal language, treatment promises, population scope, food examples, and limitations.
+2. Load the supplied topic, messages, optional claims, food examples, and optional citations; never invent new factual content.
+3. Do not refuse image generation merely because citations are absent or because the input contains words such as prevention, treatment, or diagnosis. Editorial and medical review belong upstream.
 4. Reduce the poster to no more than one to three primary messages.
-5. Record limitations even when they will not all appear on the image.
+5. Preserve any supporting notes supplied by the caller without making them a generation gate.
 6. Select visual metaphors and explicitly mark them as symbolic, not literal anatomy.
 7. Build one hero floating island, appropriate satellite food islands, clear cloud paths, and a cozy miniature ecosystem.
 8. Use the signature style: extremely cute, soft, warm, pastel, collectible, comforting, Chinese-inspired but original. Include recurring motifs such as a mushroom guide, round food residents, friendly microbe sprites, cloud paths, star markers, blank science boards, and a soft moon or sun when suitable.
 9. Build a modular image prompt and negative prompt. Include clean title/caption safe zones and instruct the image model not to render long text.
 10. Generate the illustration without long embedded text.
-11. Add title, subtitle, up to three callouts, citation footer, and project signature programmatically using Pillow or SVG with wrapping, fitting, contrast, margins, and overflow checks.
-12. Run science, style, readability, accessibility, and licensing checks.
+11. Add title, subtitle, up to three callouts, an optional citation footer, and project signature programmatically using Pillow or SVG with wrapping, fitting, contrast, margins, and overflow checks.
+12. Run style, readability, accessibility, provider-honesty, and licensing checks.
 13. Export the complete output package. For `mock`, use only `layout_mock_preview.png` and `text_overlay_mock_preview.png`, label them `LAYOUT MOCK — NOT FINAL ARTWORK`, and never create `illustration_final.png`. For a real provider, save `illustration_raw.png`, apply overlays, and then save `illustration_final.png`.
 
 ## Style guardrails
@@ -48,9 +48,9 @@ Use subtle original auspicious-cloud curves, moon-gate silhouettes, rounded tile
 
 ## Schema and integration rules
 
-Use `IllustrationRequest`, `NutritionClaim`, and `VisualSpec` from the project. Every health-related concept must originate from a supplied claim or an explicitly labeled curated fact. A visual metaphor may describe a symbolic fiber garden or microbe neighborhood; it must never claim that fiber literally becomes a smiling microbe.
+Use `IllustrationRequest`, `NutritionClaim`, and `VisualSpec` from the project. Supplied claims and citations are optional metadata; the renderer must not turn them into a content-approval gate. A visual metaphor may describe a symbolic fiber garden or microbe neighborhood; it must never claim that fiber literally becomes a smiling microbe.
 
-For Nutrition Lesson Generator integration, consume only its external `lesson_spec.json` contract. Select one cover or section slide at a time; do not import its internal Python package or automatically illustrate every slide.
+For optional Nutrition Lesson Generator integration, consume only its external `lesson_spec.json` contract. Select one cover or section slide at a time; do not import its internal Python package, evidence rules, or internal review policy.
 
 ## Agent handoff
 

@@ -1,74 +1,60 @@
+import tempfile
 import unittest
+from pathlib import Path
 
-from dreamnutri.content.safety import SafetyError, require_safe
-from dreamnutri.schemas.evidence import Citation, NutritionClaim
+from dreamnutri.content.safety import require_safe
+from dreamnutri.pipeline import generate_package, validate_visual_spec
+from dreamnutri.schemas.evidence import NutritionClaim
 from dreamnutri.schemas.request import IllustrationRequest
 
 
-def citation(citation_id="cite1"):
-    return Citation(citation_id=citation_id, text="Traceable fixture source")
-
-
-def claim(text="A supported nutrition fact.", plain="A plain message.", claim_id="c1", citation_id="cite1"):
+def claim(text="A nutrition fact.", plain="A plain message."):
     return NutritionClaim(
-        claim_id=claim_id,
+        claim_id="c1",
         claim_text=text,
         plain_language_message=plain,
-        evidence_source="fixture",
-        citation_id=citation_id,
+        evidence_source="caller supplied",
+        citation_id="not-listed",
         population="general adults",
-        evidence_strength="moderate",
-        confidence=0.8,
-        limitations=["Responses vary."],
+        evidence_strength="caller supplied",
+        confidence=0.5,
+        limitations=[],
     )
 
 
-class SafetyTests(unittest.TestCase):
-    def test_unsupported_treatment_claim_is_rejected(self):
-        request = IllustrationRequest(
-            topic="Nutrition",
-            audience="general adults",
-            nutrition_claims=[claim("This food cures diabetes.")],
-            citations=[citation()],
-        )
-        with self.assertRaises(SafetyError):
-            require_safe(request, request.nutrition_claims)
-
-    def test_unsupported_number_is_rejected(self):
-        request = IllustrationRequest(
-            topic="Nutrition",
-            audience="general adults",
-            nutrition_claims=[claim("This food contains 30 g of fiber.")],
-            citations=[citation()],
-        )
-        with self.assertRaises(SafetyError):
-            require_safe(request, request.nutrition_claims)
-
-    def test_plain_language_diagnosis_or_treatment_language_is_rejected(self):
-        request = IllustrationRequest(
-            topic="Nutrition",
-            audience="general adults",
-            nutrition_claims=[claim(plain="This picture provides a diagnosis and treatment plan.")],
-            citations=[citation()],
-        )
-        with self.assertRaises(SafetyError):
-            require_safe(request, request.nutrition_claims)
-
-    def test_supplied_claims_require_traceable_citations(self):
+class ContentPassThroughTests(unittest.TestCase):
+    def test_missing_citation_list_does_not_block(self):
         request = IllustrationRequest(
             topic="Nutrition",
             audience="general adults",
             nutrition_claims=[claim()],
+            citations=[],
         )
-        with self.assertRaises(SafetyError):
-            require_safe(request, request.nutrition_claims)
+        self.assertTrue(require_safe(request, request.nutrition_claims).ok)
 
-    def test_duplicate_claim_or_citation_ids_are_rejected(self):
+    def test_medical_words_and_numbers_do_not_block(self):
         request = IllustrationRequest(
-            topic="Nutrition",
+            topic="Nutrition education",
             audience="general adults",
-            nutrition_claims=[claim(claim_id="same"), claim(claim_id="same")],
-            citations=[citation(), citation()],
+            nutrition_claims=[claim(
+                "A lesson may discuss prevention, treatment, diagnosis, and 30 g examples.",
+                "This educational picture mentions diagnosis and treatment.",
+            )],
+            citations=[],
         )
-        with self.assertRaises(SafetyError):
-            require_safe(request, request.nutrition_claims)
+        self.assertTrue(require_safe(request, request.nutrition_claims).ok)
+
+    def test_pipeline_generates_without_citations_or_keyword_gate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            request = IllustrationRequest(
+                topic="Prevention, treatment, and diagnosis education",
+                audience="general adults",
+                primary_messages=["Explain prevention, treatment, and diagnosis in a cute science image."],
+                citations=[],
+                output_directory=directory,
+            )
+            out = generate_package(request, Path(directory) / "pass-through")
+            spec = validate_visual_spec(out / "visual_spec.json")
+            self.assertEqual(spec.science_content.citations, [])
+            self.assertTrue((out / "layout_mock_preview.png").exists())
+            self.assertFalse((out / "illustration_final.png").exists())

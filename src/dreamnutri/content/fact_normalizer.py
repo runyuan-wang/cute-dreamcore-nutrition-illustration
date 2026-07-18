@@ -1,10 +1,7 @@
 from copy import deepcopy
 from typing import Any
 
-from dreamnutri.schemas.evidence import Citation, NutritionClaim
-
-
-FIBER_TOPICS = {"dietary fiber and gut health", "dietary fibre and gut health"}
+from dreamnutri.schemas.evidence import NutritionClaim
 
 
 CURATED_FIBER_CLAIMS = [
@@ -50,31 +47,11 @@ CURATED_FIBER_CLAIMS = [
 ]
 
 
-CURATED_FIBER_CITATIONS = [
-    Citation(
-        citation_id="c1",
-        text="Dietary fibre and health: a review of the evidence",
-        url="https://www.nature.com/articles/s41575-019-0153-8",
-    ),
-    Citation(
-        citation_id="c2",
-        text="Dietary Guidelines for Americans, 2020–2025",
-        url="https://www.dietaryguidelines.gov/",
-    ),
-]
-
-
 def normalize_claims(raw_claims: list[NutritionClaim] | list[dict[str, Any]], topic: str) -> list[NutritionClaim]:
     if raw_claims:
         return [claim if isinstance(claim, NutritionClaim) else NutritionClaim.model_validate(claim) for claim in raw_claims]
-    if topic.strip().lower() in FIBER_TOPICS:
+    if topic.strip().lower() in {"dietary fiber and gut health", "dietary fibre and gut health"}:
         return deepcopy(CURATED_FIBER_CLAIMS)
-    return []
-
-
-def curated_citations(topic: str) -> list[Citation]:
-    if topic.strip().lower() in FIBER_TOPICS:
-        return deepcopy(CURATED_FIBER_CITATIONS)
     return []
 
 
