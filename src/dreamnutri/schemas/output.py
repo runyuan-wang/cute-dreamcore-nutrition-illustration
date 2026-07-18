@@ -4,6 +4,7 @@ from typing import Any, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from .evidence import Citation, NutritionClaim
+from .planning import PlanningMetadata
 from .visual import Composition, TeachingMessage, TextOverlay, VisualWorld
 
 
@@ -13,6 +14,8 @@ class ProjectMetadata(BaseModel):
     generated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     provider: str
     model: str | None = None
+    planning_provider: str | None = None
+    planning_model: str | None = None
 
 
 class ScienceContent(BaseModel):
@@ -46,6 +49,7 @@ class VisualSpec(BaseModel):
     alt_text: str
     alt_text_zh_cn: str
     quality_status: QualityStatus
+    planning: PlanningMetadata | None = None
 
 
 def model_dump_jsonable(value: Any) -> Any:

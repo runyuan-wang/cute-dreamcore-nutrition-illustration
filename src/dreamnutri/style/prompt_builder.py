@@ -16,7 +16,13 @@ def _section(title: str, body: str) -> str:
     return f"{title}: {body.strip()}"
 
 
-def build_image_prompt(request: IllustrationRequest, claims: list[NutritionClaim], world: VisualWorld, composition: Composition) -> str:
+def build_image_prompt(
+    request: IllustrationRequest,
+    claims: list[NutritionClaim],
+    world: VisualWorld,
+    composition: Composition,
+    planned_guidance: str | None = None,
+) -> str:
     foods = ", ".join(request.food_examples) if request.food_examples else "age-appropriate plant foods"
     claim_summary = " ".join(claim.plain_language_message for claim in claims[:3]) or "a symbolic nutrition concept with no implied health effect"
     sections = [
@@ -31,6 +37,11 @@ def build_image_prompt(request: IllustrationRequest, claims: list[NutritionClaim
         _section("Text-safe zones", f"Reserve a clean low-detail title safe zone at normalized rectangle {composition.title_safe_zone.model_dump()} and a small quiet caption safe zone at {composition.caption_safe_zone.model_dump()}."),
         _section("Scientific constraints", "Visual metaphors must not be presented as literal biological anatomy. Do not invent facts, quantities, citations, diagnoses, treatments, prevention promises, or long text. Do not render long text inside the image; use blank boards and safe zones for later programmatic overlays."),
     ]
+    planner_motifs = world.environment.get("planner_visual_motifs")
+    if planner_motifs:
+        sections.append(_section("Validated planner motifs", str(planner_motifs)))
+    if planned_guidance:
+        sections.append(_section("Validated planner direction", planned_guidance))
     return "\n".join(sections)
 
 

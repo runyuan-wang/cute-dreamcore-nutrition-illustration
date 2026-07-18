@@ -8,8 +8,9 @@ from PIL import Image
 from dreamnutri.content.fact_normalizer import normalize_claims, normalize_food_examples
 from dreamnutri.content.safety import require_safe
 from dreamnutri.content.teaching_messages import build_teaching_messages
-from dreamnutri.providers.base import ProviderResult
+from dreamnutri.providers.base import ImageProvider, ProviderResult
 from dreamnutri.providers.mock_provider import MockProvider
+from dreamnutri.providers.text_planner import FakeTextPlanner, OpenAITextPlanner, TextPlannerError
 from dreamnutri.quality.content_checker import check_content
 from dreamnutri.quality.report import markdown_report
 from dreamnutri.quality.visual_checker import check_visual_contract
@@ -18,7 +19,9 @@ from dreamnutri.render.contact_sheet import create_comparison_contact_sheet
 from dreamnutri.render.export import write_json, write_text
 from dreamnutri.render.safe_zones import zones_for
 from dreamnutri.schemas.output import Composition, ProjectMetadata, QualityStatus, ScienceContent, TextOverlay, VisualSpec
+from dreamnutri.schemas.planning import PlanningMetadata, PlanningResult, PlannedTeachingMessage
 from dreamnutri.schemas.request import IllustrationRequest
+from dreamnutri.schemas.visual import TeachingMessage
 from dreamnutri.style.prompt_builder import build_image_prompt, build_negative_prompt
 from dreamnutri.style.world_builder import build_visual_world
 
@@ -41,16 +44,16 @@ def _chinese_text(text: str, topic: str) -> str:
     return text
 
 
-def _alt_text(topic: str, world, messages, language: str) -> str:
+def _alt_text(topic: str, world, message_texts: list[str]) -> str:
     islands = ", ".join(island.name for island in world.secondary_islands[:5]) or "small food islands"
-    message_text = "; ".join(message.headline for message in messages[:3])
+    message_text = "; ".join(message_texts[:3])
     return f"A cute Chinese dreamcore floating-island science illustration about {topic}. A central symbolic nutrition ecosystem island is connected by cloud paths to {islands}; friendly food residents, microbe sprites, a mushroom guide, flowers, stars, and subtle garden motifs create a warm educational world. Key messages: {message_text}. The scenery is symbolic, not literal anatomy."
 
 
-def _alt_text_zh_cn(topic: str, world, messages) -> str:
+def _alt_text_zh_cn(topic: str, world, message_texts: list[str]) -> str:
     islands = "、".join(island.name for island in world.secondary_islands[:5]) or "小型食物浮岛"
-    message_text = "；".join(_chinese_text(message.headline, topic) for message in messages[:3]) or "用温和方式解释一个营养概念"
-    return f"一张关于{_chinese_text(topic, topic)}的可爱中国梦核浮空岛科学插画。中央是象征性的营养生态系统岛屿，云朵路径连接着{islands}；友好的食物居民、微生物精灵、小蘑菇向导、花朵、星星和含蓄的园林元素共同构成温暖的教育世界。核心信息：{message_text}。画面是视觉隐喻，不是真实解剖。"
+    message_text = "；".join(message_texts[:3]) or "用温和方式解释一个营养概念"
+    return f"一张关于{topic}的可爱中国梦核浮空岛科普插画。中央是象征性的营养生态系统岛屿，云朵路径连接着{islands}；友好的食物居民、微生物精灵、小蘑菇向导、花朵、星星和含蓄的园林元素共同构成温暖的教育世界。核心信息：{message_text}。画面是视觉隐喻，不是真实解剖。"
 
 
 def _provider_for(name: str):
@@ -87,13 +90,105 @@ def _visual_brief(spec: VisualSpec) -> str:
     return "\n".join(lines)
 
 
-def generate_package(request: IllustrationRequest, output_dir: str | Path | None = None) -> Path:
+def _planner_for(request: IllustrationRequest, injected):
+    if injected is not None:
+        return injected
+    # Mock is the explicit offline/test mode. Production requests use the
+    # OpenAI-compatible adapter and never silently receive fake GPT output.
+    return FakeTextPlanner() if request.provider == "mock" else OpenAITextPlanner()
+
+
+def _planning_result(planner, request, claims, foods) -> PlanningResult:
+    result = planner.plan(request, claims, foods)
+    # Injectable providers may return a dict, but it must still pass the exact
+    # Pydantic contract before compilation.
+    return PlanningResult.model_validate(result)
+
+
+def _compiled_messages(planning: PlanningResult, claims, language: str) -> list[TeachingMessage]:
+    result = []
+    normalized_language = language.lower().replace("_", "-")
+    for index, planned in enumerate(planning.visual_spec.teaching_messages[:3], 1):
+        linked = claims[min(index - 1, len(claims) - 1)].claim_id if claims else None
+        if normalized_language in {"zh", "zh-cn", "zh-hans", "chinese"}:
+            headline = planned.text_zh_cn
+        elif normalized_language == "bilingual":
+            headline = f"{planned.text_zh_cn} / {planned.text_en}"
+        else:
+            headline = planned.text_en
+        result.append(
+            TeachingMessage(
+                message_id=planned.message_id,
+                headline=headline,
+                supporting_claim_ids=[linked] if linked else [],
+                visual_metaphor=planned.visual_metaphor,
+            )
+        )
+    if not result:
+        raise ValueError("Validated visual plan must contain at least one teaching message.")
+    return result
+
+
+def _unavailable_messages(request, claims):
+    messages = build_teaching_messages(request.primary_messages, claims)
+    if messages:
+        return messages
+    return [
+        TeachingMessage(
+            message_id="planning_unavailable",
+            headline=f"Text planning unavailable for: {request.topic}",
+            supporting_claim_ids=[],
+            visual_metaphor="a quiet floating garden placeholder",
+        )
+    ]
+
+
+def generate_package(
+    request: IllustrationRequest,
+    output_dir: str | Path | None = None,
+    *,
+    text_planner=None,
+    image_provider: ImageProvider | None = None,
+) -> Path:
     claims = normalize_claims(request.nutrition_claims, request.topic)
     safety = require_safe(request, claims)
     foods = normalize_food_examples(request.food_examples, claims)
-    messages = build_teaching_messages(request.primary_messages, claims)
+
+    planner = _planner_for(request, text_planner)
+    planning_error: str | None = None
+    planning = None
+    try:
+        planning = _planning_result(planner, request, claims, foods)
+        planning.metadata.provider = getattr(planner, "name", planning.metadata.provider)
+        planning.metadata.model = getattr(planner, "model", planning.metadata.model)
+        if getattr(planner, "response_ids", None):
+            planning.metadata.response_ids = list(planner.response_ids)
+        planning.metadata.injected = bool(text_planner is not None or getattr(planner, "injected", False))
+    except Exception as exc:
+        # Keep the package inspectable, but make the failed production stage
+        # explicit. No fabricated GPT result is labeled as a successful plan.
+        planning_error = str(exc)
+        planning = None
+    if planning is not None:
+        planning_metadata = planning.metadata
+        messages = _compiled_messages(planning, claims, request.language)
+        planned_visual = planning.visual_spec
+    else:
+        planning_provider = getattr(planner, "name", planner.__class__.__name__)
+        planning_metadata = PlanningMetadata(
+            status="provider_unavailable",
+            provider=planning_provider,
+            model=getattr(planner, "model", None),
+            stages=["teaching_priority_extraction", "structured_visual_spec_generation"],
+            injected=bool(text_planner is not None),
+            error=planning_error,
+            visual_spec_source="unavailable_diagnostic_fallback",
+        )
+        messages = _unavailable_messages(request, claims)
+        planned_visual = None
+
     title_zone, caption_zone = zones_for(request)
-    world = build_visual_world(request, foods)
+    world = build_visual_world(request, foods, planned_spec=planned_visual)
     composition = Composition(
         aspect_ratio=request.aspect_ratio,
         title_safe_zone=title_zone,
@@ -101,15 +196,46 @@ def generate_package(request: IllustrationRequest, output_dir: str | Path | None
         visual_focus="Follow the gentle path from plant-food islands to the central symbolic ecosystem island.",
         reading_path=["food examples", "cloud paths", "hero nutrition ecosystem", "caption area"],
     )
+    if planned_visual is not None:
+        title_en = planned_visual.title_en
+        title_zh_cn = planned_visual.title_zh_cn
+        subtitle_en = planned_visual.subtitle_en
+        subtitle_zh_cn = planned_visual.subtitle_zh_cn
+    else:
+        title_en = request.title or request.topic
+        title_zh_cn = _chinese_text(title_en, request.topic)
+        subtitle_en = request.subtitle or request.educational_goal
+        subtitle_zh_cn = _chinese_text(subtitle_en, request.topic)
     overlays = [
-        TextOverlay(overlay_id="title", kind="title", text_en=request.title or request.topic, text_zh_cn=_chinese_text(request.title or request.topic, request.topic), safe_zone=title_zone, max_lines=2),
-        TextOverlay(overlay_id="subtitle", kind="subtitle", text_en=request.subtitle or request.educational_goal, text_zh_cn=_chinese_text(request.subtitle or request.educational_goal, request.topic), safe_zone=title_zone, max_lines=2),
+        TextOverlay(overlay_id="title", kind="title", text_en=title_en, text_zh_cn=title_zh_cn, safe_zone=title_zone, max_lines=2),
+        TextOverlay(overlay_id="subtitle", kind="subtitle", text_en=subtitle_en, text_zh_cn=subtitle_zh_cn, safe_zone=title_zone, max_lines=2),
     ]
     for index, message in enumerate(messages, 1):
-        overlays.append(TextOverlay(overlay_id=f"callout_{index:02d}", kind="callout", text_en=message.headline, text_zh_cn=_chinese_text(message.headline, request.topic), safe_zone=caption_zone, max_lines=2))
-    image_prompt = build_image_prompt(request.model_copy(update={"food_examples": foods}), claims, world, composition)
+        planned_message = planned_visual.teaching_messages[index - 1] if planned_visual is not None else None
+        overlays.append(
+            TextOverlay(
+                overlay_id=f"callout_{index:02d}",
+                kind="callout",
+                text_en=planned_message.text_en if planned_message else message.headline,
+                text_zh_cn=planned_message.text_zh_cn if planned_message else _chinese_text(message.headline, request.topic),
+                safe_zone=caption_zone,
+                max_lines=2,
+            )
+        )
+    image_prompt = build_image_prompt(
+        request.model_copy(update={"food_examples": foods}),
+        claims,
+        world,
+        composition,
+        planned_guidance=planned_visual.image_prompt_guidance if planned_visual else None,
+    )
     negative_prompt = build_negative_prompt()
-    project_metadata = ProjectMetadata(provider=request.provider, model=request.model)
+    project_metadata = ProjectMetadata(
+        provider=request.provider,
+        model=request.model,
+        planning_provider=planning_metadata.provider,
+        planning_model=planning_metadata.model,
+    )
     limitations = list(dict.fromkeys(request.limitations + [limitation for claim in claims for limitation in claim.limitations]))
     spec = VisualSpec(
         project_metadata=project_metadata,
@@ -124,9 +250,10 @@ def generate_package(request: IllustrationRequest, output_dir: str | Path | None
         image_prompt=image_prompt,
         negative_prompt=negative_prompt,
         text_overlays=overlays,
-        alt_text=_alt_text(request.topic, world, messages, "en"),
-        alt_text_zh_cn=_alt_text_zh_cn(request.topic, world, messages),
+        alt_text=_alt_text(title_en, world, [item.text_en for item in overlays if item.kind == "callout"]),
+        alt_text_zh_cn=_alt_text_zh_cn(title_zh_cn, world, [item.text_zh_cn for item in overlays if item.kind == "callout"]),
         quality_status=QualityStatus(status="planned", warnings=safety.warnings, errors=safety.errors),
+        planning=planning_metadata,
     )
     if output_dir is None:
         base = Path(request.output_directory)
@@ -150,51 +277,64 @@ def generate_package(request: IllustrationRequest, output_dir: str | Path | None
     mock_overlay_status = compose_final_image(layout_mock_path, text_overlay_mock_path, spec, mock_preview=True) if request.text_overlay_mode == "programmatic" else {"text_overlay_status": "skipped", "title_overflow": False, "subtitle_overflow": False, "caption_overflow": False, "dimensions": [request.width, request.height]}
 
     provider_result: ProviderResult | None = None
-    provider_error: str | None = None
+    provider_error: str | None = planning_error
     raw_path = out / "illustration_raw.png"
     final_path = out / "illustration_final.png"
-    if request.provider == "mock":
+    is_real_route = request.provider != "mock" or image_provider is not None
+    if not is_real_route:
         artwork_status = "mock_layout_only"
         primary_overlay_status = mock_overlay_status
         actual_dimensions = list(mock_result.returned_dimensions or (request.width, request.height))
+    elif planning_error:
+        artwork_status = "provider_unavailable"
+        primary_overlay_status = mock_overlay_status
+        actual_dimensions = list(mock_result.returned_dimensions or (request.width, request.height))
     else:
-        provider = _provider_for(request.provider)
+        provider = image_provider or _provider_for(request.provider)
         try:
             provider_result = provider.generate(spec.image_prompt, spec.negative_prompt, request.width, request.height, raw_path, request.seed, request.model)
             with Image.open(raw_path) as returned_image:
                 actual_dimensions = list(returned_image.size)
             if not provider_result.returned_dimensions:
                 provider_result.returned_dimensions = tuple(actual_dimensions)
+            is_fixture = provider_result.metadata.get("execution") == "offline_fixture"
             if request.text_overlay_mode == "programmatic":
-                primary_overlay_status = compose_final_image(raw_path, final_path, spec)
+                primary_overlay_status = compose_final_image(
+                    raw_path,
+                    final_path,
+                    spec,
+                    provenance_label="FIXTURE" if is_fixture else None,
+                )
             else:
                 primary_overlay_status = {"text_overlay_status": "skipped", "title_overflow": False, "subtitle_overflow": False, "caption_overflow": False, "dimensions": actual_dimensions}
-            artwork_status = "real_artwork_generated"
+            artwork_status = "fixture_artwork_processed" if is_fixture else "real_artwork_generated"
         except Exception as exc:
-            # This is an honest stop: the mock is only a diagnostic preview and
-            # is never assigned to illustration_raw.png or illustration_final.png.
+            # The mock is only a diagnostic preview and is never assigned to
+            # illustration_raw.png or illustration_final.png.
             provider_error = str(exc)
             artwork_status = "provider_unavailable"
             primary_overlay_status = mock_overlay_status
             actual_dimensions = list(mock_result.returned_dimensions or (request.width, request.height))
 
-    visual_report = check_visual_contract(
-        spec,
-        primary_overlay_status,
-        artwork_status=artwork_status,
-        image_path=raw_path if raw_path.exists() else None,
-    )
+    visual_report = check_visual_contract(spec, primary_overlay_status, artwork_status=artwork_status, image_path=raw_path if raw_path.exists() else None)
     final_status = "warning"
-    if content_report["status"] != "passed":
+    errors = list(content_report["errors"])
+    if planning_error:
+        errors.append(f"Text planning unavailable; no GPT result was used: {planning_error}")
+    if errors:
         final_status = "failed"
-    spec.quality_status = QualityStatus(status=final_status, warnings=content_report["warnings"], errors=content_report["errors"])
+    spec.quality_status = QualityStatus(status=final_status, warnings=content_report["warnings"], errors=errors)
     manifest = {
         "provider": request.provider,
+        "provider_execution": provider_result.provider if provider_result else ("mock_layout_only" if request.provider == "mock" else None),
         "requested_model": provider_result.requested_model if provider_result else request.model,
         "actual_model_when_available": provider_result.actual_model if provider_result else None,
         "response_id_when_available": provider_result.response_id if provider_result else None,
+        "provider_metadata": provider_result.metadata if provider_result else None,
+        "planning": planning_metadata.model_dump(mode="json"),
+        "planning_error": planning_error,
         "generation_timestamp": datetime.now(timezone.utc).isoformat(),
-        "prompt_version": "0.1.0",
+        "prompt_version": "0.2.0",
         "style_system_version": "0.1.0",
         "input_claim_ids": [claim.claim_id for claim in claims],
         "citation_ids": [citation.citation_id for citation in request.citations],
@@ -204,10 +344,12 @@ def generate_package(request: IllustrationRequest, output_dir: str | Path | None
         "content_validation_status": content_report["status"],
         "style_validation_status": visual_report["status"],
         "text_overlay_status": primary_overlay_status.get("text_overlay_status", "unknown"),
+        "language_selected": request.language,
         "artwork_status": artwork_status,
         "provider_error": provider_error,
         "mock_preview_paths": ["layout_mock_preview.png", "text_overlay_mock_preview.png"],
         "real_artwork_paths": ["illustration_raw.png", "illustration_final.png"] if artwork_status == "real_artwork_generated" else [],
+        "fixture_artwork_paths": ["illustration_raw.png", "illustration_final.png"] if artwork_status == "fixture_artwork_processed" else [],
     }
     write_json(out / "request.json", _request_dump(request))
     write_json(out / "normalized_facts.json", {"claims": [claim.model_dump(mode="json") for claim in claims], "food_examples": foods})
@@ -222,6 +364,7 @@ def generate_package(request: IllustrationRequest, output_dir: str | Path | None
         "artwork_status": artwork_status,
         "style_fidelity_not_evaluated": visual_report["style_fidelity_not_evaluated"],
         "real_image_provider_required": artwork_status != "real_artwork_generated",
+        "planning": planning_metadata.model_dump(mode="json"),
         "content": content_report,
         "visual": visual_report,
         "overlay": primary_overlay_status,
@@ -235,11 +378,7 @@ def generate_package(request: IllustrationRequest, output_dir: str | Path | None
 
 
 def finalize_external_real_artwork(output_dir: str | Path, provider_execution: str = "external_real_image_provider", actual_model: str | None = None, response_id: str | None = None) -> Path:
-    """Finalize a real image returned outside the Python provider call.
-
-    This keeps the raw artwork, overlays, contact sheet, manifest, and report
-    consistent while recording the execution route explicitly.
-    """
+    """Finalize a real image returned outside the Python provider call."""
     out = Path(output_dir)
     spec = validate_visual_spec(out / "visual_spec.json")
     request = IllustrationRequest.model_validate_json((out / "request.json").read_text(encoding="utf-8"))
@@ -275,6 +414,7 @@ def finalize_external_real_artwork(output_dir: str | Path, provider_execution: s
         "style_fidelity_not_evaluated": False,
         "real_image_provider_required": False,
         "manual_style_review_required": True,
+        "planning": spec.planning.model_dump(mode="json") if spec.planning else None,
         "content": content_report,
         "visual": visual_report,
         "overlay": overlay_status,

@@ -1,5 +1,5 @@
-from .fixture_provider import FixtureImageProvider
-from .mock_provider import MockProvider
+"""Compatibility import surface for the injectable text-planning provider."""
+
 from .text_planner import (
     FakePlanner,
     FakeTextPlanner,
@@ -14,8 +14,6 @@ from .text_planner import (
 __all__ = [
     "FakePlanner",
     "FakeTextPlanner",
-    "FixtureImageProvider",
-    "MockProvider",
     "OfflineTextPlanner",
     "OpenAICompatibleTextPlanner",
     "OpenAITextPlanner",

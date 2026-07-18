@@ -1,0 +1,13 @@
+include README.zh-CN.md
+include SKILL.md
+include CHANGELOG.md
+include requirements.txt
+recursive-include docs/images *.png *.jpg *.jpeg
+recursive-include style *.md
+recursive-include templates *.json
+recursive-include examples *.json *.md
+recursive-include scripts *.py
+prune outputs
+global-exclude *.py[cod]
+global-exclude .DS_Store
+global-exclude __pycache__
