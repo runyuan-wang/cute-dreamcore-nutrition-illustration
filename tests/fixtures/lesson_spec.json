@@ -1,0 +1,9 @@
+{
+  "title": "Dietary Fiber and Gut Health",
+  "audience": "general adults",
+  "learning_objectives": ["Define dietary fiber", "Describe the symbolic relationship between fiber-rich foods and the gut ecosystem"],
+  "slides": [
+    {"title": "Welcome", "teaching_messages": ["Nutrition science can be friendly"], "claims": []},
+    {"title": "Fiber Garden", "teaching_messages": ["Some fibers can be used by gut microorganisms in a fermentation process."], "claims": []}
+  ]
+}

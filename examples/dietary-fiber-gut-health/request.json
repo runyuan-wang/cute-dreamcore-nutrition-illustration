@@ -1,0 +1,21 @@
+{
+  "topic": "Dietary Fiber and Gut Health",
+  "audience": "general adults",
+  "language": "en",
+  "use_case": "social_poster",
+  "aspect_ratio": "4:5",
+  "title": "Dietary Fiber & Gut Health",
+  "subtitle": "A tiny tour from fiber-rich foods to a thriving gut ecosystem",
+  "educational_goal": "Explain what dietary fiber is, how fiber-rich foods relate to the gut microbiome, and why the evidence should be interpreted with appropriate uncertainty.",
+  "food_examples": ["oats", "beans", "vegetables", "fruit", "corn", "sweet potato"],
+  "population_scope": "general adults",
+  "limitations": ["The gut microbiome is complex and individual responses vary.", "This educational poster is not individualized medical advice."],
+  "citations": [
+    {"citation_id":"c1","text":"Dietary fibre and health: a review of the evidence","url":"https://www.nature.com/articles/s41575-019-0153-8"},
+    {"citation_id":"c2","text":"Dietary Guidelines for Americans, 2020–2025","url":"https://www.dietaryguidelines.gov/"}
+  ],
+  "style_preset": "cute_chinese_dreamcore_floating_islands",
+  "provider": "mock",
+  "seed": 42,
+  "output_directory": "outputs/dietary-fiber-gut-health"
+}
